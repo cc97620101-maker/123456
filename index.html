@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMF 2026 全球核子武器戰略監測地圖</title>
+    <!-- 科技感 Google 字型 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-amber: #ff6a00;
+            --color-amber-glow: rgba(255, 106, 0, 0.45);
+            --color-amber-dim: rgba(255, 106, 0, 0.15);
+            --color-dark-bg: #060505;
+            --color-panel-bg: rgba(12, 9, 8, 0.88);
+            --color-text: #e3d5ca;
+            --color-text-dim: #9e8d80;
+            --font-tech: 'Share Tech Mono', monospace;
+            --font-title: 'Orbitron', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--color-dark-bg);
+            color: var(--color-text);
+            font-family: var(--font-tech);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 網格背景與掃描線 */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255, 106, 0, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 106, 0, 0.025) 1px, transparent 1px);
+            background-size: 32px 32px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.35) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* 頂部 HUD 標題列 */
+        header {
+            height: 65px;
+            border-bottom: 1px solid rgba(255, 106, 0, 0.35);
+            background: rgba(8, 6, 5, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            position: relative;
+            z-index: 20;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.9);
+        }
+
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--color-amber), transparent);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .defcon-badge {
+            background: rgba(255, 46, 46, 0.15);
+            border: 1px solid #ff2e2e;
+            color: #ff2e2e;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(255, 46, 46, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .system-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #ff2e2e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #ff2e2e;
+            animation: pulse 1.2s infinite;
+        }
+
+        .system-meta {
+            font-size: 10px;
+            color: var(--color-text-dim);
+            letter-spacing: 1px;
+            line-height: 1.3;
+        }
+
+        .header-center {
+            text-align: center;
+        }
+
+        .header-center h1 {
+            font-family: var(--font-title);
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            color: #ffffff;
+            text-shadow: 0 0 12px rgba(255, 106, 0, 0.6);
+        }
+
+        .header-center p {
+            font-size: 10px;
+            color: var(--color-amber);
+            letter-spacing: 2px;
+            margin-top: 1px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-hud {
+            background: rgba(255, 106, 0, 0.08);
+            border: 1px solid var(--color-amber);
+            color: var(--color-amber);
+            padding: 5px 12px;
+            cursor: pointer;
+            font-family: var(--font-tech);
+            font-size: 11px;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-hud:hover, .btn-hud.active {
+            background: var(--color-amber);
+            color: #000;
+            box-shadow: 0 0 12px var(--color-amber-glow);
+            font-weight: bold;
+        }
+
+        /* 主工作區 */
+        .workspace {
+            flex-grow: 1;
+            display: flex;
+            position: relative;
+            z-index: 5;
+            height: calc(100vh - 65px);
+        }
+
+        /* 兩側 HUD 面板 */
+        .hud-panel {
+            position: relative;
+            background: var(--color-panel-bg);
+            border: 1px solid rgba(255, 106, 0, 0.2);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .hud-panel::before, .hud-panel::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-color: var(--color-amber);
+            border-style: solid;
+            pointer-events: none;
+        }
+
+        .hud-panel::before {
+            top: -1px;
+            left: -1px;
+            border-width: 2px 0 0 2px;
+        }
+
+        .hud-panel::after {
+            bottom: -1px;
+            right: -1px;
+            border-width: 0 2px 2px 0;
+        }
+
+        .panel-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255, 106, 0, 0.25);
+            background: rgba(255, 106, 0, 0.06);
+            font-family: var(--font-title);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--color-amber);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .panel-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .panel-content::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-content::-webkit-scrollbar-thumb {
+            background: var(--color-amber-glow);
+        }
+
+        /* 左側排行榜與日誌 */
+        .sidebar-left {
+            width: 310px;
+            border-right: 1px solid rgba(255, 106, 0, 0.15);
+        }
+
+        .leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .leaderboard-item {
+            background: rgba(255, 106, 0, 0.03);
+            border: 1px solid rgba(255, 106, 0, 0.12);
+            padding: 7px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .leaderboard-item:hover, .leaderboard-item.active {
+            background: rgba(255, 106, 0, 0.15);
+            border-color: var(--color-amber);
+            box-shadow: 0 0 10px rgba(255, 106, 0, 0.25);
+            transform: translateX(3px);
+        }
+
+        .leaderboard-rank {
+            font-size: 11px;
+            color: var(--color-amber);
+            width: 22px;
+            font-weight: bold;
+        }
+
+        .leaderboard-name {
+            font-size: 13px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .leaderboard-val {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--color-amber);
+        }
+
+        .leaderboard-val span {
+            font-size: 10px;
+            color: var(--color-text-dim);
+            font-weight: normal;
+        }
+
+        .terminal-panel {
+            height: 220px;
+            border-top: 1px solid rgba(255, 106, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .terminal-log {
+            flex-grow: 1;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            font-size: 10px;
+            color: #ff8833;
+            overflow-y: auto;
+            line-height: 1.4;
+        }
+
+        /* 中間地圖畫布區 */
+        .map-section {
+            flex-grow: 1;
+            position: relative;
+            background: #040303;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #map-canvas, #globe-canvas {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* 懸浮提示框 (Tooltip) */
+        .hud-tooltip {
+            position: absolute;
+            z-index: 100;
+            background: rgba(10, 7, 6, 0.94);
+            border: 1px solid var(--color-amber);
+            box-shadow: 0 0 20px rgba(255, 106, 0, 0.4);
+            padding: 12px 16px;
+            pointer-events: none;
+            display: none;
+            border-radius: 2px;
+            min-width: 220px;
+        }
+
+        .hud-tooltip::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--color-amber), transparent);
+        }
+
+        .tooltip-title-zh {
+            font-size: 16px;
+            font-weight: bold;
+            color: #ffffff;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .tooltip-title-en {
+            font-size: 10px;
+            color: var(--color-text-dim);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px dashed rgba(255, 106, 0, 0.15);
+        }
+
+        .tooltip-val {
+            font-weight: bold;
+            color: var(--color-amber);
+        }
+
+        /* 右下角高科技圖例 (Legend) */
+        .hud-legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 15;
+            background: rgba(10, 8, 7, 0.92);
+            border: 1px solid rgba(255, 106, 0, 0.3);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            padding: 12px 14px;
+            width: 230px;
+        }
+
+        .legend-title {
+            font-size: 11px;
+            font-family: var(--font-title);
+            color: var(--color-amber);
+            font-weight: bold;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255, 106, 0, 0.25);
+            padding-bottom: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 11px;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 3px 6px;
+            border-radius: 2px;
+            transition: all 0.2s;
+        }
+
+        .legend-row:hover {
+            background: rgba(255, 106, 0, 0.12);
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            border: 1px solid rgba(255, 106, 0, 0.4);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 右側國家詳情與三位一體分析 */
+        .sidebar-right {
+            width: 320px;
+            border-left: 1px solid rgba(255, 106, 0, 0.15);
+        }
+
+        .detail-card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .detail-header {
+            border-bottom: 2px solid var(--color-amber);
+            padding-bottom: 6px;
+        }
+
+        .detail-zh {
+            font-size: 22px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 8px rgba(255, 106, 0, 0.3);
+        }
+
+        .detail-en {
+            font-size: 11px;
+            color: var(--color-text-dim);
+            letter-spacing: 1px;
+        }
+
+        .stat-box {
+            background: rgba(255, 106, 0, 0.04);
+            border: 1px solid rgba(255, 106, 0, 0.15);
+            padding: 10px;
+        }
+
+        .stat-lbl {
+            font-size: 10px;
+            color: var(--color-text-dim);
+            letter-spacing: 1px;
+            margin-bottom: 3px;
+        }
+
+        .stat-val {
+            font-size: 22px;
+            font-weight: bold;
+            color: var(--color-amber);
+            font-family: var(--font-title);
+        }
+
+        .stat-val span {
+            font-size: 12px;
+            color: var(--color-text);
+            margin-left: 3px;
+        }
+
+        /* 三位一體進度條 */
+        .triad-box {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        .triad-row {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 11px;
+        }
+
+        .triad-meta {
+            display: flex;
+            justify-content: space-between;
+            color: var(--color-text-dim);
+        }
+
+        .triad-bar-wrap {
+            height: 6px;
+            background: rgba(255, 106, 0, 0.08);
+            border: 1px solid rgba(255, 106, 0, 0.2);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .triad-bar {
+            height: 100%;
+            background: var(--color-amber);
+            box-shadow: 0 0 6px var(--color-amber-glow);
+            transition: width 0.5s ease;
+        }
+
+        .simulate-btn {
+            background: linear-gradient(180deg, rgba(255, 46, 46, 0.12), rgba(255, 46, 46, 0.25));
+            border: 1px solid #ff2e2e;
+            color: #ff2e2e;
+            padding: 10px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-family: var(--font-title);
+            font-weight: bold;
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            box-shadow: 0 0 12px rgba(255, 46, 46, 0.2);
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .simulate-btn:hover {
+            background: #ff2e2e;
+            color: #000;
+            box-shadow: 0 0 20px rgba(255, 46, 46, 0.6);
+        }
+
+        /* 模態視窗 M.A.D. 模擬器 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(4, 3, 3, 0.92);
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(12px);
+        }
+
+        .modal-box {
+            width: 540px;
+            background: #0d0806;
+            border: 2px solid #ff2e2e;
+            box-shadow: 0 0 60px rgba(255, 46, 46, 0.35);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .modal-header {
+            background: rgba(255, 46, 46, 0.15);
+            padding: 14px;
+            border-bottom: 1px solid #ff2e2e;
+            font-family: var(--font-title);
+            color: #ff2e2e;
+            font-weight: bold;
+            font-size: 14px;
+            letter-spacing: 2px;
+        }
+
+        .modal-body {
+            padding: 20px;
+            font-family: var(--font-tech);
+        }
+
+        .sim-console {
+            background: #000;
+            border: 1px solid rgba(255, 46, 46, 0.3);
+            padding: 10px;
+            height: 160px;
+            overflow-y: auto;
+            color: #ff4444;
+            font-size: 11px;
+            line-height: 1.4;
+            margin-bottom: 15px;
+        }
+
+        .sim-stat {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+            padding: 6px 0;
+            font-size: 13px;
+        }
+
+        .sim-stat span:last-child {
+            font-weight: bold;
+            color: #ff2e2e;
+        }
+
+        .close-btn {
+            background: transparent;
+            border: 1px solid #ff2e2e;
+            color: #ff2e2e;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: var(--font-tech);
+            font-size: 11px;
+            margin-top: 15px;
+            align-self: flex-end;
+            transition: all 0.2s;
+        }
+
+        .close-btn:hover {
+            background: #ff2e2e;
+            color: #000;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+
+        .blink {
+            animation: pulse 1.2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 視覺背景網格與掃描線 -->
+    <div class="grid-overlay"></div>
+    <div class="scanlines"></div>
+
+    <!-- 頂部 HUD 標題 -->
+    <header>
+        <div class="header-left">
+            <div class="defcon-badge">
+                <div class="system-dot"></div>
+                <span>DEFCON 2 // CRISIS ALERT</span>
+            </div>
+            <div class="system-meta">
+                <div>IMF SECURE ORBITAL LINK [ALPHA-9]</div>
+                <div>TELEMETRY: ACTIVE // 2026 INVENTORY</div>
+            </div>
+        </div>
+
+        <div class="header-center">
+            <h1>2026 全球核子武器戰略監測地圖</h1>
+            <p>RESTRICTED ACCESS - CLASSIFIED LEVEL 5</p>
+        </div>
+
+        <div class="header-right">
+            <button class="btn-hud active" id="btn-mode-2d" onclick="setMapMode('2d')">2D 戰術地圖</button>
+            <button class="btn-hud" id="btn-mode-3d" onclick="setMapMode('3d')">3D 全像地球</button>
+            <button class="btn-hud" id="btn-sound" onclick="toggleAudio()">音訊: 已關閉</button>
+        </div>
+    </header>
+
+    <!-- 核心工作區 -->
+    <div class="workspace">
+
+        <!-- 左側面板：排行榜與日誌 -->
+        <div class="hud-panel sidebar-left">
+            <div class="panel-header">
+                <span>全球核武儲備排行 (2026)</span>
+                <span class="blink" style="color:var(--color-amber);">● LIVE</span>
+            </div>
+            <div class="panel-content">
+                <div class="leaderboard-list" id="leaderboard"></div>
+            </div>
+
+            <!-- 即時終端日誌 -->
+            <div class="terminal-panel">
+                <div class="panel-header">
+                    <span>情報串流與監測日誌</span>
+                    <span style="font-size: 10px; color: var(--color-text-dim);">FEED</span>
+                </div>
+                <div class="terminal-log" id="log-feed"></div>
+            </div>
+        </div>
+
+        <!-- 中間地圖畫布區 -->
+        <div class="map-section" id="map-section">
+            <canvas id="map-canvas"></canvas>
+
+            <!-- 懸浮提示框 (Tooltip) -->
+            <div class="hud-tooltip" id="hud-tooltip">
+                <div class="tooltip-title-zh" id="tt-zh">國家</div>
+                <div class="tooltip-title-en" id="tt-en">Country</div>
+                <div class="tooltip-row">
+                    <span>核彈儲備總數</span>
+                    <span class="tooltip-val" id="tt-val">0 枚</span>
+                </div>
+                <div class="tooltip-row">
+                    <span>國際條約現況</span>
+                    <span style="color:#e3d5ca;" id="tt-status">NPT 締約國</span>
+                </div>
+                <div class="tooltip-row">
+                    <span>戰術威脅評級</span>
+                    <span style="color:#ff3300; font-weight:bold;" id="tt-threat">HIGH</span>
+                </div>
+            </div>
+
+            <!-- 右下角專屬圖例 (Legend) -->
+            <div class="hud-legend">
+                <div class="legend-title">
+                    <span>COLOR SCALE // 圖例說明</span>
+                    <span class="blink">●</span>
+                </div>
+                <div class="legend-items">
+                    <div class="legend-row" onclick="filterLegend(0)">
+                        <div class="legend-color" style="background:#312720; border-color:#524135;"></div>
+                        <span>0 枚 (非核武國家)</span>
+                    </div>
+                    <div class="legend-row" onclick="filterLegend(1)">
+                        <div class="legend-color" style="background:#66432a; border-color:#ff6a00;"></div>
+                        <span>1 - 99 枚</span>
+                    </div>
+                    <div class="legend-row" onclick="filterLegend(2)">
+                        <div class="legend-color" style="background:#9e5927; border-color:#ff6a00;"></div>
+                        <span>100 - 499 枚</span>
+                    </div>
+                    <div class="legend-row" onclick="filterLegend(3)">
+                        <div class="legend-color" style="background:#c44700; border-color:#ff6a00;"></div>
+                        <span>500 - 1999 枚</span>
+                    </div>
+                    <div class="legend-row" onclick="filterLegend(4)">
+                        <div class="legend-color" style="background:#7d0e00; border-color:#ff3300; box-shadow:0 0 8px #ff3300;"></div>
+                        <span style="font-weight:bold; color:#fff;">2000+ 枚 (核武霸權)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側面板：戰術剖析 -->
+        <div class="hud-panel sidebar-right">
+            <div class="panel-header">
+                <span>戰術核心剖析面板</span>
+                <span id="threat-blink" class="blink" style="color: #00ff64;">● SAFE</span>
+            </div>
+            <div class="panel-content">
+                <div class="detail-card" id="detail-card"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- M.A.D. 核危機模擬視窗 -->
+    <div class="modal-overlay" id="sim-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span>⚠ WARNING: THERMONUCLEAR CRISIS SIMULATION</span>
+            </div>
+            <div class="modal-body">
+                <div class="sim-console" id="sim-console"></div>
+                <div class="sim-stat">
+                    <span>戰備動員狀態</span>
+                    <span style="color:#ff2e2e;">100% RED ALERT</span>
+                </div>
+                <div class="sim-stat">
+                    <span>模擬預估平民死傷數</span>
+                    <span id="sim-casualties" style="font-size: 18px;">0</span>
+                </div>
+                <div class="sim-stat">
+                    <span>全球大氣核輻射擴散率</span>
+                    <span id="sim-fallout">0%</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                    <span style="font-size: 10px; color:#ff2e2e;" class="blink">IMF RESULT: MUTUALLY ASSURED DESTRUCTION</span>
+                    <button class="close-btn" onclick="closeSimulation()">關閉模擬</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 2026 全球核武數據庫 ---
+        const nuclearCountries = {
+            'RU': { nameZh: '俄羅斯', nameEn: 'Russia', value: 5580, status: '儲備與部署中 (NPT 締約國)', threat: 'CRITICAL', triad: { silo: 1710, sub: 1280, air: 580, reserve: 2010 }, lat: 61.524, lon: 105.318 },
+            'US': { nameZh: '美國', nameEn: 'United States', value: 5044, status: '儲備與部署中 (NPT 締約國)', threat: 'CRITICAL', triad: { silo: 1420, sub: 1150, air: 300, reserve: 2174 }, lat: 37.090, lon: -95.712 },
+            'CN': { nameZh: '中國', nameEn: 'China', value: 500, status: '快速擴充中 (NPT 締約國)', threat: 'HIGH', triad: { silo: 240, sub: 140, air: 40, reserve: 80 }, lat: 35.861, lon: 104.195 },
+            'FR': { nameZh: '法國', nameEn: 'France', value: 290, status: '部署與儲備中 (NPT 締約國)', threat: 'MODERATE', triad: { silo: 0, sub: 240, air: 50, reserve: 0 }, lat: 46.227, lon: 2.213 },
+            'GB': { nameZh: '英國', nameEn: 'United Kingdom', value: 225, status: '部署中 (NPT 締約國)', threat: 'MODERATE', triad: { silo: 0, sub: 225, air: 0, reserve: 0 }, lat: 55.378, lon: -3.435 },
+            'IN': { nameZh: '印度', nameEn: 'India', value: 172, status: '非 NPT 簽署國', threat: 'MODERATE', triad: { silo: 80, sub: 40, air: 52, reserve: 0 }, lat: 20.593, lon: 78.962 },
+            'PK': { nameZh: '巴基斯坦', nameEn: 'Pakistan', value: 170, status: '非 NPT 簽署國', threat: 'MODERATE', triad: { silo: 110, sub: 0, air: 60, reserve: 0 }, lat: 30.375, lon: 69.345 },
+            'IL': { nameZh: '以色列', nameEn: 'Israel', value: 90, status: '不承認不否認政策', threat: 'MODERATE', triad: { silo: 50, sub: 20, air: 20, reserve: 0 }, lat: 31.046, lon: 34.851 },
+            'KP': { nameZh: '北韓', nameEn: 'North Korea', value: 50, status: '已退出 NPT 條約', threat: 'HIGH', triad: { silo: 30, sub: 10, air: 10, reserve: 0 }, lat: 40.339, lon: 127.510 }
+        };
+
+        const countryNamesZh = {
+            'TW': '台灣', 'JP': '日本', 'KR': '南韓', 'CA': '加拿大', 'AU': '澳洲', 'DE': '德國', 'IT': '義大利',
+            'ES': '西班牙', 'BR': '巴西', 'MX': '墨西哥', 'AR': '阿根廷', 'ZA': '南非', 'EG': '埃及', 'SA': '沙烏地阿拉伯',
+            'TR': '土耳其', 'UA': '烏克蘭', 'PL': '波蘭', 'ID': '印尼', 'MY': '馬來西亞', 'TH': '泰國', 'VN': '越南',
+            'PH': '菲律賓', 'NZ': '紐西蘭', 'IR': '伊朗', 'IQ': '伊拉克', 'SY': '敘利亞', 'SE': '瑞典', 'NO': '挪威', 'FI': '芬蘭'
+        };
+
+        // --- 2. 高精度內建地圖輪廓向量 ---
+        // 內含全球主要國家幾何形狀多邊形，完全離線 100% 渲染顯示
+        const mapPolygons = [
+            // RU - Russia
+            { id: 'RU', nameEn: 'Russia', path: [[120,70],[170,68],[175,60],[140,50],[90,52],[60,55],[30,60],[32,70],[60,75],[90,72]] },
+            // US - USA
+            { id: 'US', nameEn: 'United States', path: [[-125,48],[-120,30],[-105,26],[-80,25],[-70,42],[-90,49],[-110,49]] },
+            // CN - China
+            { id: 'CN', nameEn: 'China', path: [[75,38],[85,48],[120,50],[122,30],[110,20],[100,22],[90,30],[80,30]] },
+            // CA - Canada
+            { id: 'CA', nameEn: 'Canada', path: [[-140,60],[-130,75],[-70,75],[-60,48],[-90,50],[-125,49]] },
+            // BR - Brazil
+            { id: 'BR', nameEn: 'Brazil', path: [[-70,-10],[-50,-2],[-35,-10],[-40,-25],[-55,-30],[-70,-18]] },
+            // AU - Australia
+            { id: 'AU', nameEn: 'Australia', path: [[115,-15],[140,-12],[153,-28],[138,-38],[115,-35],[113,-25]] },
+            // IN - India
+            { id: 'IN', nameEn: 'India', path: [[70,30],[88,26],[85,10],[77,8],[68,22]] },
+            // PK - Pakistan
+            { id: 'PK', nameEn: 'Pakistan', path: [[61,25],[70,33],[74,30],[68,23]] },
+            // FR - France
+            { id: 'FR', nameEn: 'France', path: [[-4,48],[8,50],[7,43],[-1,43]] },
+            // GB - UK
+            { id: 'GB', nameEn: 'United Kingdom', path: [[-6,58],[2,57],[0,50],[-5,50]] },
+            // IL - Israel
+            { id: 'IL', nameEn: 'Israel', path: [[34,31],[35,33],[35,30],[34,29]] },
+            // KP - North Korea
+            { id: 'KP', nameEn: 'North Korea', path: [[124,40],[130,42],[129,38],[125,38]] },
+            // TW - Taiwan
+            { id: 'TW', nameEn: 'Taiwan', path: [[120,25],[122,25],[121,22],[120,22]] },
+            // JP - Japan
+            { id: 'JP', nameEn: 'Japan', path: [[130,32],[140,43],[145,42],[135,34]] },
+            // DE - Germany
+            { id: 'DE', nameEn: 'Germany', path: [[6,54],[14,54],[14,48],[6,48]] },
+            // ZA - South Africa
+            { id: 'ZA', nameEn: 'South Africa', path: [[17,-34],[32,-27],[28,-33],[18,-34]] },
+            // MX - Mexico
+            { id: 'MX', nameEn: 'Mexico', path: [[-115,32],[-100,25],[-90,18],[-105,20]] },
+            // AR - Argentina
+            { id: 'AR', nameEn: 'Argentina', path: [[-70,-22],[-60,-22],[-65,-52],[-73,-48]] },
+            // ID - Indonesia
+            { id: 'ID', nameEn: 'Indonesia', path: [[95,5],[120,2],[140,-5],[100,-8]] },
+            // EG - Egypt
+            { id: 'EG', nameEn: 'Egypt', path: [[25,31],[35,31],[35,22],[25,22]] },
+            // SA - Saudi Arabia
+            { id: 'SA', nameEn: 'Saudi Arabia', path: [[35,28],[50,28],[55,16],[42,16]] },
+            // TR - Turkey
+            { id: 'TR', nameEn: 'Turkey', path: [[26,41],[44,41],[42,37],[27,37]] },
+            // UA - Ukraine
+            { id: 'UA', nameEn: 'Ukraine', path: [[23,51],[40,51],[38,45],[25,45]] },
+            // SE - Sweden
+            { id: 'SE', nameEn: 'Sweden', path: [[11,68],[22,68],[18,55],[12,56]] },
+            // NO - Norway
+            { id: 'NO', nameEn: 'Norway', path: [[5,60],[15,70],[28,70],[8,62]] },
+            // FI - Finland
+            { id: 'FI', nameEn: 'Finland', path: [[21,70],[31,70],[28,60],[21,60]] },
+            // GL - Greenland
+            { id: 'GL', nameEn: 'Greenland', path: [[-70,75],[-20,83],[-30,65],[-50,60]] }
+        ];
+
+        // --- 3. 顏色階梯與調色板 (深棕色系) ---
+        function getCountryColor(val) {
+            if (val === 0) return '#312720';        // 淺銅棕色 (非核武國)
+            if (val < 100) return '#66432a';       // 中棕色 (1-99枚)
+            if (val < 500) return '#9e5927';       // 琥珀棕 (100-499枚)
+            if (val < 2000) return '#c44700';      // 深橙棕 (500-1999枚)
+            return '#7d0e00';                      // 深焦黑紅棕 (2000+枚)
+        }
+
+        // --- 4. 畫布渲染引擎 (2D / 3D) ---
+        const canvas = document.getElementById('map-canvas');
+        const ctx = canvas.getContext('2d');
+        let viewMode = '2d'; // '2d' or '3d'
+        let hoveredCountry = null;
+        let selectedCountry = null;
+        let activeLegendFilter = null;
+        let globeRotation = 0;
+        let icbmArcs = [];
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 經緯度轉 2D 平面 Mercator 座標
+        function project2D(lon, lat) {
+            const x = (lon + 180) * (canvas.width / 360);
+            const y = (90 - lat) * (canvas.height / 180);
+            return { x, y };
+        }
+
+        // 經緯度轉 3D 球體 座標
+        function project3D(lon, lat) {
+            const radius = Math.min(canvas.width, canvas.height) * 0.35;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            const radLon = (lon + globeRotation) * (Math.PI / 180);
+            const radLat = lat * (Math.PI / 180);
+
+            const x = cx + radius * Math.cos(radLat) * Math.sin(radLon);
+            const y = cy - radius * Math.sin(radLat);
+            const z = radius * Math.cos(radLat) * Math.cos(radLon);
+
+            return { x, y, z, visible: z > 0 };
+        }
+
+        // 繪製地圖主迴圈
+        function renderMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (viewMode === '3d') {
+                globeRotation += 0.15; // 地球自轉
+                
+                // 繪製 3D 地球背景與經緯線
+                const radius = Math.min(canvas.width, canvas.height) * 0.35;
+                const cx = canvas.width / 2;
+                const cy = canvas.height / 2;
+
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#0a0706';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 106, 0, 0.25)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 經緯網格
+                ctx.strokeStyle = 'rgba(255, 106, 0, 0.08)';
+                ctx.lineWidth = 1;
+                for (let lat = -60; lat <= 60; lat += 30) {
+                    ctx.beginPath();
+                    for (let lon = -180; lon <= 180; lon += 10) {
+                        const pt = project3D(lon, lat);
+                        if (pt.visible) {
+                            if (lon === -180) ctx.moveTo(pt.x, pt.y);
+                            else ctx.lineTo(pt.x, pt.y);
+                        }
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            // 繪製多邊形國家
+            mapPolygons.forEach(item => {
+                const nData = nuclearCountries[item.id];
+                const val = nData ? nData.value : 0;
+                let color = getCountryColor(val);
+
+                // 圖例過濾高亮
+                if (activeLegendFilter !== null) {
+                    const match0 = (activeLegendFilter === 0 && val === 0);
+                    const match1 = (activeLegendFilter === 1 && val >= 1 && val < 100);
+                    const match2 = (activeLegendFilter === 2 && val >= 100 && val < 500);
+                    const match3 = (activeLegendFilter === 3 && val >= 500 && val < 2000);
+                    const match4 = (activeLegendFilter === 4 && val >= 2000);
+
+                    if (!match0 && !match1 && !match2 && !match3 && !match4) {
+                        color = 'rgba(40, 30, 25, 0.3)';
+                    }
+                }
+
+                const isHovered = (hoveredCountry === item.id);
+                const isSelected = (selectedCountry === item.id);
+
+                ctx.beginPath();
+                let allVisible = true;
+
+                item.path.forEach((pt, idx) => {
+                    const coord = viewMode === '2d' ? project2D(pt[0], pt[1]) : project3D(pt[0], pt[1]);
+                    if (viewMode === '3d' && !coord.visible) allVisible = false;
+
+                    if (idx === 0) ctx.moveTo(coord.x, coord.y);
+                    else ctx.lineTo(coord.x, coord.y);
+                });
+                ctx.closePath();
+
+                if (allVisible) {
+                    ctx.fillStyle = isHovered ? '#ffd4a3' : (isSelected ? '#ff6a00' : color);
+                    ctx.fill();
+
+                    ctx.strokeStyle = (nData && nData.value >= 2000) ? '#ff3300' : (isHovered ? '#ffffff' : 'rgba(255, 106, 0, 0.3)');
+                    ctx.lineWidth = isHovered ? 2 : (nData ? 1.2 : 0.6);
+                    ctx.stroke();
+                }
+            });
+
+            // 繪製 ICBM 打擊飛彈弧線
+            icbmArcs.forEach(arc => {
+                const src = viewMode === '2d' ? project2D(arc.srcLon, arc.srcLat) : project3D(arc.srcLon, arc.srcLat);
+                const tgt = viewMode === '2d' ? project2D(arc.tgtLon, arc.tgtLat) : project3D(arc.tgtLon, arc.tgtLat);
+
+                if (viewMode === '2d' || (src.visible && tgt.visible)) {
+                    ctx.beginPath();
+                    const midX = (src.x + tgt.x) / 2;
+                    const midY = (src.y + tgt.y) / 2 - 60; // 弧形高度
+                    ctx.moveTo(src.x, src.y);
+                    ctx.quadraticCurveTo(midX, midY, tgt.x, tgt.y);
+                    ctx.strokeStyle = '#ff3300';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // 飛彈發光節點
+                    ctx.beginPath();
+                    ctx.arc(tgt.x, tgt.y, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ff3300';
+                    ctx.shadowColor = '#ff2e2e';
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            });
+
+            requestAnimationFrame(renderMap);
+        }
+
+        // --- 5. 滑鼠互動事件判斷 ---
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            let found = null;
+
+            mapPolygons.forEach(item => {
+                let pts = item.path.map(pt => viewMode === '2d' ? project2D(pt[0], pt[1]) : project3D(pt[0], pt[1]));
+                if (pointInPolygon({ x: mouseX, y: mouseY }, pts)) {
+                    found = item.id;
+                }
+            });
+
+            const tt = document.getElementById('hud-tooltip');
+            if (found) {
+                if (hoveredCountry !== found) {
+                    hoveredCountry = found;
+                    playHoverBeep();
+                    showTooltip(e.clientX, e.clientY, found);
+                } else {
+                    tt.style.left = `${e.clientX + 15}px`;
+                    tt.style.top = `${e.clientY + 15}px`;
+                }
+            } else {
+                hoveredCountry = null;
+                tt.style.display = 'none';
+            }
+        });
+
+        canvas.addEventListener('click', () => {
+            if (hoveredCountry) {
+                selectedCountry = hoveredCountry;
+                playClickBeep();
+                updateCountryProfile(hoveredCountry);
+                triggerICBM(hoveredCountry);
+                addLog(`TARGET_LOCK: [${hoveredCountry}] // COMPILING TRIAD DATA`);
+            }
+        });
+
+        function pointInPolygon(point, vs) {
+            let x = point.x, y = point.y;
+            let inside = false;
+            for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                let xi = vs[i].x, yi = vs[i].y;
+                let xj = vs[j].x, yj = vs[j].y;
+                let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        // 觸發 ICBM 彈道軌道動畫
+        function triggerICBM(countryId) {
+            const src = nuclearCountries[countryId];
+            if (!src) return;
+
+            icbmArcs = [];
+            const targets = [
+                { lon: 37.61, lat: 55.75 },   // 莫斯科
+                { lon: -77.03, lat: 38.90 },  // 華盛頓
+                { lon: 116.40, lat: 39.90 },  // 北京
+                { lon: -0.12, lat: 51.50 },   // 倫敦
+                { lon: 77.20, lat: 28.61 }    // 新德里
+            ];
+
+            targets.forEach(tgt => {
+                icbmArcs.push({
+                    srcLon: src.lon, srcLat: src.lat,
+                    tgtLon: tgt.lon, tgtLat: tgt.lat
+                });
+            });
+        }
+
+        // --- 6. 懸浮提示框 (Tooltip) 內容 ---
+        function showTooltip(x, y, id) {
+            const tt = document.getElementById('hud-tooltip');
+            const nData = nuclearCountries[id];
+            const nameZh = nData ? nData.nameZh : (countryNamesZh[id] || id);
+            const nameEn = nData ? nData.nameEn : id;
+            const val = nData ? nData.value : 0;
+            const status = nData ? nData.status : '非核武締約國';
+            const threat = nData ? nData.threat : 'SAFE';
+
+            document.getElementById('tt-zh').innerText = nameZh;
+            document.getElementById('tt-en').innerText = nameEn;
+            document.getElementById('tt-val').innerText = `${val.toLocaleString()} 枚`;
+            document.getElementById('tt-status').innerText = status;
+            document.getElementById('tt-threat').innerText = threat;
+
+            tt.style.display = 'block';
+            tt.style.left = `${x + 15}px`;
+            tt.style.top = `${y + 15}px`;
+        }
+
+        // --- 7. 排行榜與詳細資訊渲染 ---
+        function renderLeaderboard() {
+            const container = document.getElementById('leaderboard');
+            container.innerHTML = '';
+
+            const sorted = Object.keys(nuclearCountries)
+                .map(k => ({ id: k, ...nuclearCountries[k] }))
+                .sort((a, b) => b.value - a.value);
+
+            sorted.forEach((item, idx) => {
+                const el = document.createElement('div');
+                el.className = 'leaderboard-item';
+                el.onclick = () => {
+                    selectedCountry = item.id;
+                    playClickBeep();
+                    updateCountryProfile(item.id);
+                    triggerICBM(item.id);
+                };
+                el.innerHTML = `
+                    <div style="display:flex; align-items:center;">
+                        <span class="leaderboard-rank">0${idx + 1}</span>
+                        <span class="leaderboard-name">${item.nameZh}</span>
+                    </div>
+                    <span class="leaderboard-val">${item.value.toLocaleString()} <span>枚</span></span>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function updateCountryProfile(id) {
+            const container = document.getElementById('detail-card');
+            const nData = nuclearCountries[id];
+            const threatBlink = document.getElementById('threat-blink');
+
+            if (!nData) {
+                threatBlink.style.color = '#00ff64';
+                threatBlink.innerText = '● SAFE';
+                container.innerHTML = `
+                    <div class="detail-header">
+                        <div class="detail-zh">${countryNamesZh[id] || id}</div>
+                        <div class="detail-en">${id}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-lbl">2026 核彈儲備總數</div>
+                        <div class="stat-val" style="color:#00ff64;">0<span>枚</span></div>
+                    </div>
+                    <div style="font-size:11px; color:var(--color-text-dim); line-height:1.5;">
+                        非核武國家，遵循聯合國不擴散協定，防禦網無打擊威脅。
+                    </div>
+                    <div class="simulate-btn" onclick="renderGlobalOverview()">返回全球概覽</div>
+                `;
+                return;
+            }
+
+            threatBlink.style.color = nData.value >= 2000 ? '#ff2e2e' : '#ff6a00';
+            threatBlink.innerText = nData.value >= 2000 ? '● CRITICAL' : '● WARNING';
+
+            const triad = nData.triad;
+            const total = nData.value;
+
+            container.innerHTML = `
+                <div class="detail-header">
+                    <div class="detail-zh">${nData.nameZh}</div>
+                    <div class="detail-en">${nData.nameEn} (${id})</div>
+                </div>
+
+                <div class="stat-box">
+                    <div class="stat-lbl">2026 核武庫存總數</div>
+                    <div class="stat-val">${nData.value.toLocaleString()}<span>枚</span></div>
+                </div>
+
+                <div class="stat-lbl" style="margin-top:8px;">► 2026 核武「三位一體」(Triad) 戰術結構</div>
+                <div class="triad-box">
+                    <div class="triad-row">
+                        <div class="triad-meta">
+                            <span>陸基洲際飛彈 (ICBM Silos)</span>
+                            <span>${triad.silo} 枚</span>
+                        </div>
+                        <div class="triad-bar-wrap"><div class="triad-bar" style="width:${(triad.silo/total)*100}%;"></div></div>
+                    </div>
+
+                    <div class="triad-row">
+                        <div class="triad-meta">
+                            <span>海基潛射飛彈 (SSBN Subs)</span>
+                            <span>${triad.sub} 枚</span>
+                        </div>
+                        <div class="triad-bar-wrap"><div class="triad-bar" style="width:${(triad.sub/total)*100}%;"></div></div>
+                    </div>
+
+                    <div class="triad-row">
+                        <div class="triad-meta">
+                            <span>空基戰略轟炸機 (Bombers)</span>
+                            <span>${triad.air} 枚</span>
+                        </div>
+                        <div class="triad-bar-wrap"><div class="triad-bar" style="width:${(triad.air/total)*100}%;"></div></div>
+                    </div>
+
+                    ${triad.reserve > 0 ? `
+                    <div class="triad-row">
+                        <div class="triad-meta">
+                            <span>備役與待退役軍備 (Reserve)</span>
+                            <span>${triad.reserve} 枚</span>
+                        </div>
+                        <div class="triad-bar-wrap"><div class="triad-bar" style="width:${(triad.reserve/total)*100}%; background:#888;"></div></div>
+                    </div>` : ''}
+                </div>
+
+                <div class="simulate-btn" onclick="startStrategicSimulation()">執行危機模擬 (M.A.D.)</div>
+                <div class="simulate-btn" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.2); color:#fff; margin-top:5px;" onclick="renderGlobalOverview()">返回全球概覽</div>
+            `;
+        }
+
+        function renderGlobalOverview() {
+            icbmArcs = [];
+            selectedCountry = null;
+            document.getElementById('threat-blink').style.color = '#ff6a00';
+            document.getElementById('threat-blink').innerText = '● STANDBY';
+
+            const container = document.getElementById('detail-card');
+            container.innerHTML = `
+                <div class="detail-header">
+                    <div class="detail-zh">全球核武戰略概覽</div>
+                    <div class="detail-en">Global Nuclear Inventory 2026</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-lbl">2026 全球估算核彈總數</div>
+                    <div class="stat-val">12,121<span>枚</span></div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-lbl">主要核子力量國家數</div>
+                    <div class="stat-val" style="color:#ff2e2e;">9<span>國</span></div>
+                </div>
+                <div style="background:rgba(255,106,0,0.04); border:1px solid rgba(255,106,0,0.15); padding:10px; font-size:11px; line-height:1.5;">
+                    <div style="color:var(--color-amber); font-weight:bold; margin-bottom:3px;">⚠ 情報簡報 (2026)</div>
+                    全球有 5 個 NPT 法定核武國及 4 個非 NPT 實體核武國。2026 年全球戰備水準已上升至冷戰後新高。
+                </div>
+                <div class="simulate-btn" onclick="startStrategicSimulation()">執行核危機戰略模擬 (RUN M.A.D.)</div>
+            `;
+        }
+
+        // --- 8. 圖例點擊過濾 ---
+        function filterLegend(idx) {
+            if (activeLegendFilter === idx) {
+                activeLegendFilter = null;
+                addLog("FILTER_OFF: SHOW ALL COUNTRIES");
+            } else {
+                activeLegendFilter = idx;
+                addLog(`FILTER_ACTIVE: RANGE [${idx}]`);
+            }
+        }
+
+        // --- 9. 音效與模式切換 ---
+        let audioCtx = null;
+        let audioEnabled = false;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playBeep(freq, duration) {
+            if (!audioEnabled) return;
+            try {
+                initAudio();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playHoverBeep() { playBeep(880, 0.04); }
+        function playClickBeep() { playBeep(440, 0.08); }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const btn = document.getElementById('btn-sound');
+            btn.innerText = audioEnabled ? "音訊: 已開啟" : "音訊: 已關閉";
+            btn.classList.toggle('active', audioEnabled);
+            if (audioEnabled) {
+                initAudio();
+                playBeep(523, 0.15);
+                addLog("SYSTEM_AUDIO: ONLINE");
+            }
+        }
+
+        function setMapMode(mode) {
+            viewMode = mode;
+            document.getElementById('btn-mode-2d').classList.toggle('active', mode === '2d');
+            document.getElementById('btn-mode-3d').classList.toggle('active', mode === '3d');
+            addLog(`VIEW_MODE: SWITCHED TO [${mode.toUpperCase()}]`);
+        }
+
+        // --- 10. 終端日誌串流 ---
+        const logFeed = document.getElementById('log-feed');
+        function addLog(msg) {
+            const time = new Date().toTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            div.style.marginBottom = '4px';
+            div.innerHTML = `<span style="color:rgba(255,106,0,0.5)">[${time}]</span> > ${msg}`;
+            logFeed.appendChild(div);
+            logFeed.scrollTop = logFeed.scrollHeight;
+            if (logFeed.children.length > 40) logFeed.removeChild(logFeed.firstChild);
+        }
+
+        setInterval(() => {
+            const randomLogs = [
+                "NORAD EARLY WARNING: ALL SECTORS CLEAR",
+                "SAT-LINK B-12 TELEMETRY UPDATED",
+                "SIPRI 2026 INVENTORY RE-CALIBRATED",
+                "SUB-SURFACE ACOUSTIC SENSORS: NOMINAL"
+            ];
+            if (Math.random() > 0.6) addLog(randomLogs[Math.floor(Math.random() * randomLogs.length)]);
+        }, 7000);
+
+        // --- 11. M.A.D. 模擬器 ---
+        let simInterval = null;
+        function startStrategicSimulation() {
+            document.getElementById('sim-modal').style.display = 'flex';
+            const consoleEl = document.getElementById('sim-console');
+            consoleEl.innerHTML = '';
+            
+            const casEl = document.getElementById('sim-casualties');
+            const fallEl = document.getElementById('sim-fallout');
+            casEl.innerText = '0';
+            fallEl.innerText = '0%';
+
+            const steps = [
+                "INITIATING THERMONUCLEAR CRISIS SIMULATION (M.A.D.)...",
+                "CONNECTED TO DEFENSE GRID SECTOR 4...",
+                "[ALERT] DETECTING COLD-LAUNCH INTERCONTINENTAL MISSILES...",
+                "DEFCON 1 ACTIVATED BY NATIONAL COMMAND AUTHORITY...",
+                "SATELLITE WARNING: 450+ WARHEADS DETECTED IN POLAR TRAJECTORY...",
+                "COMPUTING IMPACT ZONES & BLAST RADIUS...",
+                "CALCULATING 10-YEAR GLOBAL NUCLEAR WINTER FALLOUT...",
+                "SIMULATION CONCLUDED."
+            ];
+
+            let step = 0;
+            simInterval = setInterval(() => {
+                if (step < steps.length) {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '4px';
+                    div.innerText = `> ${steps[step]}`;
+                    consoleEl.appendChild(div);
+                    consoleEl.scrollTop = consoleEl.scrollHeight;
+
+                    if (step >= 3) {
+                        const casTarget = 7420119300;
+                        const pct = (step - 3) / (steps.length - 4);
+                        casEl.innerText = Math.floor(casTarget * Math.pow(pct, 2)).toLocaleString();
+                        fallEl.innerText = `${Math.floor(100 * pct)}%`;
+                    }
+                    step++;
+                } else {
+                    clearInterval(simInterval);
+                }
+            }, 800);
+        }
+
+        function closeSimulation() {
+            clearInterval(simInterval);
+            document.getElementById('sim-modal').style.display = 'none';
+        }
+
+        // --- 初始化啟動 ---
+        window.onload = () => {
+            renderLeaderboard();
+            renderGlobalOverview();
+            renderMap();
+            addLog("SYSTEM_READY: 2026 NUCLEAR INVENTORY ONLINE.");
+        };
+    </script>
+</body>
+</html>
